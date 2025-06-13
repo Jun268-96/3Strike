@@ -17,6 +17,11 @@ self.addEventListener('install', function(event) {
         console.log('캐시 열기 성공');
         return cache.addAll(urlsToCache);
       })
+      .catch(function(error) {
+        console.error('캐시 addAll 실패:', error);
+        // 캐시 실패시에도 서비스워커 설치 계속 진행
+        return Promise.resolve();
+      })
   );
 });
 
