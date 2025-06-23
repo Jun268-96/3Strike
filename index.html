@@ -617,16 +617,61 @@
 
         // 페이지 로드 시 저장된 데이터 불러오기
         window.onload = function() {
-            const savedData = localStorage.getItem('students');
-            if (savedData) {
-                students = JSON.parse(savedData);
-                renderStudents();
+            try {
+                const savedData = localStorage.getItem('students');
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    // 데이터 유효성 검증
+                    if (Array.isArray(parsedData)) {
+                        students = parsedData.filter(student => {
+                            // 학생 객체 유효성 검증
+                            return student && 
+                                   typeof student.name === 'string' && 
+                                   student.name.trim() !== '' &&
+                                   typeof student.id !== 'undefined' &&
+                                   typeof student.warnings === 'number';
+                        });
+                    } else {
+                        console.warn('저장된 학생 데이터가 올바른 형식이 아닙니다. 초기화합니다.');
+                        students = [];
+                    }
+                    renderStudents();
+                }
+            } catch (error) {
+                console.error('학생 데이터 로드 중 오류 발생:', error);
+                students = [];
+                // 손상된 데이터 제거
+                localStorage.removeItem('students');
             }
             
-            const savedStats = localStorage.getItem('statistics');
-            if (savedStats) {
-                statistics = JSON.parse(savedStats);
-                updateStatsDisplay();
+            try {
+                const savedStats = localStorage.getItem('statistics');
+                if (savedStats) {
+                    const parsedStats = JSON.parse(savedStats);
+                    // 통계 데이터 유효성 검증
+                    if (parsedStats && 
+                        typeof parsedStats.totalWarnings === 'number' &&
+                        typeof parsedStats.totalOuts === 'number' &&
+                        typeof parsedStats.studentStats === 'object') {
+                        statistics = parsedStats;
+                    } else {
+                        console.warn('저장된 통계 데이터가 올바른 형식이 아닙니다. 초기화합니다.');
+                        statistics = {
+                            totalWarnings: 0,
+                            totalOuts: 0,
+                            studentStats: {}
+                        };
+                    }
+                    updateStatsDisplay();
+                }
+            } catch (error) {
+                console.error('통계 데이터 로드 중 오류 발생:', error);
+                statistics = {
+                    totalWarnings: 0,
+                    totalOuts: 0,
+                    studentStats: {}
+                };
+                localStorage.removeItem('statistics');
             }
             
             // 탭 이벤트 리스너 설정
@@ -647,10 +692,13 @@
             const nameInput = document.getElementById('studentName');
             const name = nameInput.value.trim();
             
-            if (name === '') return;
+            if (name === '' || typeof name !== 'string') {
+                console.warn('잘못된 학생 이름:', name);
+                return;
+            }
             
             // 중복 확인
-            if (students.some(s => s.name === name)) {
+            if (students.some(s => s && s.name === name)) {
                 alert(`'${name}'은(는) 이미 등록된 학생입니다.`);
                 return;
             }
@@ -661,7 +709,13 @@
                 warnings: 0
             };
             
-            students.push(student);
+            // 학생 객체 유효성 재확인
+            if (student.name && typeof student.name === 'string' && student.name.trim() !== '') {
+                students.push(student);
+            } else {
+                console.error('학생 객체 생성 실패:', student);
+                return;
+            }
             
             // 통계 초기화
             if (!statistics.studentStats[name]) {
@@ -683,13 +737,20 @@
             const batchText = document.getElementById('batchNames').value.trim();
             if (!batchText) return;
             
-            const names = batchText.split('\n').map(n => n.trim()).filter(n => n !== '');
+            const names = batchText.split('\n').map(n => n.trim()).filter(n => n !== '' && typeof n === 'string');
             let addedCount = 0;
             let duplicateCount = 0;
+            let invalidCount = 0;
             
             names.forEach(name => {
+                // 이름 유효성 검증
+                if (!name || typeof name !== 'string' || name.trim() === '') {
+                    invalidCount++;
+                    return;
+                }
+                
                 // 중복 확인
-                if (students.some(s => s.name === name)) {
+                if (students.some(s => s && s.name === name)) {
                     duplicateCount++;
                     return;
                 }
@@ -700,8 +761,14 @@
                     warnings: 0
                 };
                 
-                students.push(student);
-                addedCount++;
+                // 학생 객체 유효성 재확인
+                if (student.name && typeof student.name === 'string' && student.name.trim() !== '') {
+                    students.push(student);
+                    addedCount++;
+                } else {
+                    console.error('학생 객체 생성 실패:', student);
+                    invalidCount++;
+                }
                 
                 // 통계 초기화
                 if (!statistics.studentStats[name]) {
@@ -717,7 +784,14 @@
                 renderStudents();
             }
             
-            alert(`${addedCount}명의 학생이 등록되었습니다.${duplicateCount > 0 ? `\n${duplicateCount}명은 이미 등록된 학생이어서 추가되지 않았습니다.` : ''}`);
+            let message = `${addedCount}명의 학생이 등록되었습니다.`;
+            if (duplicateCount > 0) {
+                message += `\n${duplicateCount}명은 이미 등록된 학생이어서 추가되지 않았습니다.`;
+            }
+            if (invalidCount > 0) {
+                message += `\n${invalidCount}명은 잘못된 형식이어서 추가되지 않았습니다.`;
+            }
+            alert(message);
             document.getElementById('batchNames').value = '';
         }
         
@@ -780,15 +854,37 @@
             const container = document.getElementById('studentsContainer');
             container.innerHTML = '';
             
+            // 학생 배열 유효성 검증
+            if (!Array.isArray(students)) {
+                console.error('students가 배열이 아닙니다:', students);
+                students = [];
+                return;
+            }
+            
+            // 유효하지 않은 학생 데이터 필터링
+            const validStudents = students.filter(student => {
+                return student && 
+                       typeof student.name === 'string' && 
+                       student.name.trim() !== '' &&
+                       typeof student.id !== 'undefined' &&
+                       typeof student.warnings === 'number';
+            });
+            
+            if (validStudents.length !== students.length) {
+                console.warn(`${students.length - validStudents.length}명의 잘못된 학생 데이터를 제거합니다.`);
+                students = validStudents;
+                saveData(); // 정화된 데이터 저장
+            }
+            
             if (students.length === 0) {
                 container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 30px; color: #718096;">등록된 학생이 없습니다.</p>';
                 return;
             }
             
-            // 이름 순으로 정렬 (name이 undefined인 경우 처리)
+            // 이름 순으로 정렬 (추가 안전장치)
             const sortedStudents = [...students].sort((a, b) => {
-                const nameA = a.name || '';
-                const nameB = b.name || '';
+                const nameA = (a && a.name) ? a.name : '';
+                const nameB = (b && b.name) ? b.name : '';
                 return nameA.localeCompare(nameB, 'ko');
             });
             
@@ -890,9 +986,29 @@
         
         // 데이터 저장
         function saveData() {
-            localStorage.setItem('students', JSON.stringify(students));
-            localStorage.setItem('statistics', JSON.stringify(statistics));
-            updateStatsDisplay();
+            try {
+                // 데이터 유효성 검증 후 저장
+                const validStudents = students.filter(student => {
+                    return student && 
+                           typeof student.name === 'string' && 
+                           student.name.trim() !== '' &&
+                           typeof student.id !== 'undefined' &&
+                           typeof student.warnings === 'number';
+                });
+                
+                if (validStudents.length !== students.length) {
+                    console.warn(`${students.length - validStudents.length}명의 잘못된 학생 데이터가 제거되었습니다.`);
+                    students = validStudents;
+                }
+                
+                localStorage.setItem('students', JSON.stringify(students));
+                localStorage.setItem('statistics', JSON.stringify(statistics));
+                updateStatsDisplay();
+            } catch (error) {
+                console.error('데이터 저장 중 오류 발생:', error);
+                // 저장 실패 시 사용자에게 알림
+                alert('데이터 저장 중 오류가 발생했습니다. 브라우저의 저장 공간을 확인해주세요.');
+            }
         }
         
         // 일괄 업로드 토글 함수
