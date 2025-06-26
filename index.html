@@ -96,9 +96,8 @@
         }
 
         .students-grid {
-            display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
             gap: 10px;
             margin-top: 20px;
         }
@@ -112,7 +111,7 @@
             position: relative;
             overflow: hidden;
             width: 100%;
-            max-width: 170px;
+            min-height: 200px;
             display: flex;
             flex-direction: column;
         }
@@ -236,6 +235,16 @@
             background: #718096;
         }
 
+        .btn-clean {
+            background: #8b5cf6 !important;
+            color: white !important;
+        }
+
+        .btn-clean:hover {
+            background: #7c3aed !important;
+            transform: translateY(-1px);
+        }
+
 
 
         .stats-section {
@@ -293,6 +302,12 @@
             opacity: 0.5;
         }
 
+        @media (max-width: 1200px) {
+            .students-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        
         @media (max-width: 768px) {
             .input-group {
                 flex-direction: column;
@@ -302,14 +317,20 @@
                 width: 100%;
             }
             
-            .student-card {
-                max-width: calc(50% - 5px);
+            .students-grid {
+                grid-template-columns: repeat(3, 1fr);
             }
         }
         
-        @media (max-width: 480px) {
-            .student-card {
-                max-width: 100%;
+        @media (max-width: 600px) {
+            .students-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .students-grid {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -519,6 +540,7 @@
         <!-- 탭 메뉴 -->
         <div class="tabs">
             <div class="tab active" data-tab="main">메인</div>
+            <div class="tab" data-tab="polite">말 좀 예쁘게 해라</div>
             <div class="tab" data-tab="stats">통계</div>
         </div>
         
@@ -553,6 +575,36 @@
                 <!-- 초기화 버튼 -->
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                     <button onclick="resetAllWarnings()" style="background: #ed8936;">당일 경고 초기화</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 말 좀 예쁘게 해라 탭 콘텐츠 -->
+        <div id="politeTab" class="tab-content">
+            <div id="politeStudentsContainer" class="students-grid"></div>
+            
+            <div class="input-section" style="margin-top: 30px;">
+                <div class="input-group">
+                    <input type="text" id="politeStudentName" placeholder="학생 이름 입력...">
+                    <button onclick="addPoliteStudent()">학생 추가</button>
+                </div>
+                
+                <!-- 일괄 업로드 토글 버튼 -->
+                <div class="batch-upload-toggle">
+                    <div class="toggle-button" id="politeBatchToggleBtn" onclick="togglePoliteBatchUpload()">
+                        <span>일괄 업로드</span>
+                        <i>▼</i>
+                    </div>
+                </div>
+                
+                <!-- 일괄 업로드 섹션 -->
+                <div class="batch-upload" id="politeBatchUploadSection">
+                    <p class="upload-info">한 줄에 한 명씩 학생 이름을 입력하세요</p>
+                    <textarea id="politeBatchNames" placeholder="홍길동
+김철수
+이영희
+..."></textarea>
+                    <button onclick="batchUploadPolite()">일괄 등록</button>
                 </div>
             </div>
         </div>
@@ -610,6 +662,14 @@
         
         let students = [];
         let statistics = {
+            totalWarnings: 0,
+            totalOuts: 0,
+            studentStats: {}
+        };
+
+        // 말 좀 예쁘게 해라 탭용 데이터
+        let politeStudents = [];
+        let politeStatistics = {
             totalWarnings: 0,
             totalOuts: 0,
             studentStats: {}
@@ -674,6 +734,62 @@
                 localStorage.removeItem('statistics');
             }
             
+            // 말 좀 예쁘게 해라 탭 데이터 로드
+            try {
+                const savedPoliteData = localStorage.getItem('politeStudents');
+                if (savedPoliteData) {
+                    const parsedPoliteData = JSON.parse(savedPoliteData);
+                    // 데이터 유효성 검증
+                    if (Array.isArray(parsedPoliteData)) {
+                        politeStudents = parsedPoliteData.filter(student => {
+                            // 학생 객체 유효성 검증
+                            return student && 
+                                   typeof student.name === 'string' && 
+                                   student.name.trim() !== '' &&
+                                   typeof student.id !== 'undefined' &&
+                                   typeof student.warnings === 'number';
+                        });
+                    } else {
+                        console.warn('저장된 polite 학생 데이터가 올바른 형식이 아닙니다. 초기화합니다.');
+                        politeStudents = [];
+                    }
+                }
+            } catch (error) {
+                console.error('polite 학생 데이터 로드 중 오류 발생:', error);
+                politeStudents = [];
+                // 손상된 데이터 제거
+                localStorage.removeItem('politeStudents');
+            }
+            
+            try {
+                const savedPoliteStats = localStorage.getItem('politeStatistics');
+                if (savedPoliteStats) {
+                    const parsedPoliteStats = JSON.parse(savedPoliteStats);
+                    // 통계 데이터 유효성 검증
+                    if (parsedPoliteStats && 
+                        typeof parsedPoliteStats.totalWarnings === 'number' &&
+                        typeof parsedPoliteStats.totalOuts === 'number' &&
+                        typeof parsedPoliteStats.studentStats === 'object') {
+                        politeStatistics = parsedPoliteStats;
+                    } else {
+                        console.warn('저장된 polite 통계 데이터가 올바른 형식이 아닙니다. 초기화합니다.');
+                        politeStatistics = {
+                            totalWarnings: 0,
+                            totalOuts: 0,
+                            studentStats: {}
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('polite 통계 데이터 로드 중 오류 발생:', error);
+                politeStatistics = {
+                    totalWarnings: 0,
+                    totalOuts: 0,
+                    studentStats: {}
+                };
+                localStorage.removeItem('politeStatistics');
+            }
+            
             // 탭 이벤트 리스너 설정
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -683,6 +799,13 @@
                     tab.classList.add('active');
                     const tabName = tab.getAttribute('data-tab');
                     document.getElementById(tabName + 'Tab').classList.add('active');
+                    
+                    // 탭 전환 시 해당 탭의 데이터 렌더링
+                    if (tabName === 'polite') {
+                        renderPoliteStudents();
+                    } else if (tabName === 'main') {
+                        renderStudents();
+                    }
                 });
             });
         }
@@ -812,8 +935,8 @@
                     };
                 }
                 
-                // 삼진아웃 체크
-                if (student.warnings === 3) {
+                // 삼진아웃 체크 (3의 배수마다 아웃)
+                if (student.warnings % 3 === 0 && student.warnings > 0) {
                     // 아웃 통계 업데이트
                     statistics.totalOuts++;
                     if (statistics.studentStats[student.name]) {
@@ -821,7 +944,8 @@
                     }
                     
                     // 오버레이 표시
-                    document.getElementById('outStudentName').textContent = `${student.name} 학생이 아웃되었습니다!`;
+                    const outCount = Math.floor(student.warnings / 3);
+                    document.getElementById('outStudentName').textContent = `${student.name} 학생이 ${outCount}번째 아웃되었습니다!`;
                     document.getElementById('outOverlay').style.display = 'flex';
                 }
                 
@@ -904,7 +1028,7 @@
                         <div class="warning-badge warning-${student.warnings}">${warningLevel}</div>
                     </div>
                     <div class="button-group">
-                        <button class="btn-warning" onclick="addWarning(${student.id})" ${student.warnings >= 3 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>경고 추가</button>
+                        <button class="btn-warning" onclick="addWarning(${student.id})">경고 추가</button>
                         <button class="btn-reset" onclick="resetWarnings(${student.id})">초기화</button>
                     </div>
                 `;
@@ -917,12 +1041,17 @@
         
         // 경고 레벨 텍스트 반환
         function getWarningLevel(warnings) {
-            switch(warnings) {
-                case 0: return '양호';
-                case 1: return '1스트라이크';
-                case 2: return '2스트라이크';
-                case 3: return '아웃';
-                default: return `아웃 (${warnings})`;
+            if (warnings === 0) return '양호';
+            if (warnings < 3) {
+                return `${warnings}스트라이크`;
+            } else {
+                const outCount = Math.floor(warnings / 3);
+                const remainingWarnings = warnings % 3;
+                if (remainingWarnings === 0) {
+                    return `${outCount}아웃`;
+                } else {
+                    return `${outCount}아웃 ${remainingWarnings}스트라이크`;
+                }
             }
         }
         
@@ -1003,6 +1132,23 @@
                 
                 localStorage.setItem('students', JSON.stringify(students));
                 localStorage.setItem('statistics', JSON.stringify(statistics));
+                
+                // polite 데이터도 저장
+                const validPoliteStudents = politeStudents.filter(student => {
+                    return student && 
+                           typeof student.name === 'string' && 
+                           student.name.trim() !== '' &&
+                           typeof student.id !== 'undefined' &&
+                           typeof student.warnings === 'number';
+                });
+                
+                if (validPoliteStudents.length !== politeStudents.length) {
+                    console.warn(`${politeStudents.length - validPoliteStudents.length}명의 잘못된 polite 학생 데이터가 제거되었습니다.`);
+                    politeStudents = validPoliteStudents;
+                }
+                
+                localStorage.setItem('politeStudents', JSON.stringify(politeStudents));
+                localStorage.setItem('politeStatistics', JSON.stringify(politeStatistics));
                 updateStatsDisplay();
             } catch (error) {
                 console.error('데이터 저장 중 오류 발생:', error);
@@ -1068,6 +1214,271 @@
         function updateStats() {
             document.getElementById('totalStudents').textContent = students.length;
             document.getElementById('warningStudents').textContent = students.filter(s => s.warnings > 0).length;
+        }
+
+        // =========== 말 좀 예쁘게 해라 탭 관련 함수들 ===========
+        
+        // Polite 학생 추가 함수
+        function addPoliteStudent() {
+            const nameInput = document.getElementById('politeStudentName');
+            const name = nameInput.value.trim();
+            
+            if (name === '' || typeof name !== 'string') {
+                console.warn('잘못된 학생 이름:', name);
+                return;
+            }
+            
+            // 중복 확인
+            if (politeStudents.some(s => s && s.name === name)) {
+                alert(`'${name}'은(는) 이미 등록된 학생입니다.`);
+                return;
+            }
+            
+            const student = {
+                id: Date.now(),
+                name: name,
+                warnings: 0
+            };
+            
+            // 학생 객체 유효성 재확인
+            if (student.name && typeof student.name === 'string' && student.name.trim() !== '') {
+                politeStudents.push(student);
+            } else {
+                console.error('Polite 학생 객체 생성 실패:', student);
+                return;
+            }
+            
+            // 통계 초기화
+            if (!politeStatistics.studentStats[name]) {
+                politeStatistics.studentStats[name] = {
+                    totalWarnings: 0,
+                    totalOuts: 0
+                };
+            }
+            
+            saveData();
+            renderPoliteStudents();
+            
+            nameInput.value = '';
+            nameInput.focus();
+        }
+        
+        // Polite 일괄 업로드 함수
+        function batchUploadPolite() {
+            const batchText = document.getElementById('politeBatchNames').value.trim();
+            if (!batchText) return;
+            
+            const names = batchText.split('\n').map(n => n.trim()).filter(n => n !== '' && typeof n === 'string');
+            let addedCount = 0;
+            let duplicateCount = 0;
+            let invalidCount = 0;
+            
+            names.forEach(name => {
+                // 이름 유효성 검증
+                if (!name || typeof name !== 'string' || name.trim() === '') {
+                    invalidCount++;
+                    return;
+                }
+                
+                // 중복 확인
+                if (politeStudents.some(s => s && s.name === name)) {
+                    duplicateCount++;
+                    return;
+                }
+                
+                const student = {
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    name: name,
+                    warnings: 0
+                };
+                
+                // 학생 객체 유효성 재확인
+                if (student.name && typeof student.name === 'string' && student.name.trim() !== '') {
+                    politeStudents.push(student);
+                    addedCount++;
+                } else {
+                    console.error('Polite 학생 객체 생성 실패:', student);
+                    invalidCount++;
+                }
+                
+                // 통계 초기화
+                if (!politeStatistics.studentStats[name]) {
+                    politeStatistics.studentStats[name] = {
+                        totalWarnings: 0,
+                        totalOuts: 0
+                    };
+                }
+            });
+            
+            if (addedCount > 0) {
+                saveData();
+                renderPoliteStudents();
+            }
+            
+            let message = `${addedCount}명의 학생이 등록되었습니다.`;
+            if (duplicateCount > 0) {
+                message += `\n${duplicateCount}명은 이미 등록된 학생이어서 추가되지 않았습니다.`;
+            }
+            if (invalidCount > 0) {
+                message += `\n${invalidCount}명은 잘못된 형식이어서 추가되지 않았습니다.`;
+            }
+            alert(message);
+            document.getElementById('politeBatchNames').value = '';
+        }
+        
+        // Polite 경고 추가 함수
+        function addPoliteWarning(studentId) {
+            const student = politeStudents.find(s => s.id === studentId);
+            if (student) {
+                student.warnings++;
+                
+                // 통계 업데이트
+                politeStatistics.totalWarnings++;
+                if (politeStatistics.studentStats[student.name]) {
+                    politeStatistics.studentStats[student.name].totalWarnings++;
+                } else {
+                    politeStatistics.studentStats[student.name] = {
+                        totalWarnings: 1,
+                        totalOuts: 0
+                    };
+                }
+                
+                // 삼진아웃 체크 (3의 배수마다 아웃)
+                if (student.warnings % 3 === 0 && student.warnings > 0) {
+                    // 아웃 통계 업데이트
+                    politeStatistics.totalOuts++;
+                    if (politeStatistics.studentStats[student.name]) {
+                        politeStatistics.studentStats[student.name].totalOuts++;
+                    }
+                    
+                    // 오버레이 표시
+                    const outCount = Math.floor(student.warnings / 3);
+                    document.getElementById('outStudentName').textContent = `${student.name} 학생이 ${outCount}번째 아웃되었습니다! (말 좀 예쁘게 해라)`;
+                    document.getElementById('outOverlay').style.display = 'flex';
+                }
+                
+                saveData();
+                renderPoliteStudents();
+            }
+        }
+        
+        // 청소 기능 (경고 -3)
+        function cleanStudent(studentId) {
+            const student = politeStudents.find(s => s.id === studentId);
+            if (student) {
+                if (confirm(`'${student.name}' 학생을 청소하시겠습니까? (경고 -3)`)) {
+                    const oldWarnings = student.warnings;
+                    student.warnings = Math.max(0, student.warnings - 3); // 0 이하로 내려가지 않게
+                    
+                    const reducedWarnings = oldWarnings - student.warnings;
+                    if (reducedWarnings > 0) {
+                        alert(`${student.name} 학생의 경고가 ${reducedWarnings}개 감소했습니다. (${oldWarnings} → ${student.warnings})`);
+                    } else {
+                        alert(`${student.name} 학생은 이미 경고가 0개입니다.`);
+                    }
+                    
+                    saveData();
+                    renderPoliteStudents();
+                }
+            }
+        }
+        
+        // Polite 학생 삭제 함수
+        function deletePoliteStudent(studentId) {
+            const student = politeStudents.find(s => s.id === studentId);
+            if (!student) return;
+            
+            if (confirm(`'${student.name}' 학생을 정말로 삭제하시겠습니까?`)) {
+                politeStudents = politeStudents.filter(s => s.id !== studentId);
+                saveData();
+                renderPoliteStudents();
+            }
+        }
+        
+        // Polite 학생 경고 초기화 함수
+        function resetPoliteWarnings(studentId) {
+            const student = politeStudents.find(s => s.id === studentId);
+            if (student) {
+                student.warnings = 0;
+                saveData();
+                renderPoliteStudents();
+            }
+        }
+        
+        // Polite 일괄 업로드 토글 함수
+        function togglePoliteBatchUpload() {
+            const section = document.getElementById('politeBatchUploadSection');
+            const button = document.getElementById('politeBatchToggleBtn');
+            
+            section.classList.toggle('active');
+            button.classList.toggle('active');
+        }
+        
+        // Polite 학생 목록 렌더링
+        function renderPoliteStudents() {
+            const container = document.getElementById('politeStudentsContainer');
+            container.innerHTML = '';
+            
+            // 학생 배열 유효성 검증
+            if (!Array.isArray(politeStudents)) {
+                console.error('politeStudents가 배열이 아닙니다:', politeStudents);
+                politeStudents = [];
+                return;
+            }
+            
+            // 유효하지 않은 학생 데이터 필터링
+            const validStudents = politeStudents.filter(student => {
+                return student && 
+                       typeof student.name === 'string' && 
+                       student.name.trim() !== '' &&
+                       typeof student.id !== 'undefined' &&
+                       typeof student.warnings === 'number';
+            });
+            
+            if (validStudents.length !== politeStudents.length) {
+                console.warn(`${politeStudents.length - validStudents.length}명의 잘못된 polite 학생 데이터를 제거합니다.`);
+                politeStudents = validStudents;
+                saveData(); // 정화된 데이터 저장
+            }
+            
+            if (politeStudents.length === 0) {
+                container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 30px; color: #718096;">등록된 학생이 없습니다.</p>';
+                return;
+            }
+            
+            // 이름 순으로 정렬 (추가 안전장치)
+            const sortedStudents = [...politeStudents].sort((a, b) => {
+                const nameA = (a && a.name) ? a.name : '';
+                const nameB = (b && b.name) ? b.name : '';
+                return nameA.localeCompare(nameB, 'ko');
+            });
+            
+            sortedStudents.forEach(student => {
+                const card = document.createElement('div');
+                card.className = `student-card warning-${student.warnings}`;
+                
+                const warningLevel = getWarningLevel(student.warnings);
+                
+                card.innerHTML = `
+                    <div class="student-header">
+                        <div class="student-name">${student.name}</div>
+                        <div class="delete-icon" onclick="deletePoliteStudent(${student.id})" title="학생 삭제">×</div>
+                    </div>
+                    <div class="warning-info">
+                        <div class="warning-count">경고: ${student.warnings}</div>
+                        <div class="warning-badge warning-${student.warnings}">${warningLevel}</div>
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-warning" onclick="addPoliteWarning(${student.id})">경고 추가</button>
+                        <button class="btn-reset" onclick="resetPoliteWarnings(${student.id})">초기화</button>
+                    </div>
+                    <div class="button-group" style="margin-top: 5px;">
+                        <button class="btn-clean" onclick="cleanStudent(${student.id})" style="background: #8b5cf6; color: white; flex: 1; padding: 8px 5px; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; font-size: 13px;">🧹 청소 (-3)</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
         }
         
 
